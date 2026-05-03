@@ -37,6 +37,24 @@ WATCHLIST = {
 }
 ALERT_THRESHOLD = 3.0
 
+# ─────────────────────────────────────────
+# RECOMMENDED STOCKS — Debt Free Gems
+# ─────────────────────────────────────────
+RECOMMENDED_MIDCAP = {
+    "Polycab":      "POLYCAB.NS",
+    "Persistent":   "PERSISTENT.NS",
+    "HDFC AMC":     "HDFCAMC.NS",
+    "CAMS":         "CAMS.NS",
+    "Amara Raja":   "AMARAJABAT.NS",
+}
+
+RECOMMENDED_SMALLCAP = {
+    "Anup Engg":    "ANUP.NS",
+    "Maithan Alloy":"MAITHANALL.NS",
+    "Mah Seamless": "MAHSEAMLES.NS",
+    "JK Paper":     "JKPAPER.NS",
+}
+
 def get_change_pct(info):
     try:
         return round((info.last_price / info.previous_close - 1) * 100, 2)
@@ -76,6 +94,25 @@ def fetch_watchlist():
             results[name] = {"price": 0, "chg": 0}
     return results
 
+def fetch_recommended():
+    midcap = {}
+    for name, symbol in RECOMMENDED_MIDCAP.items():
+        try:
+            t = yf.Ticker(symbol)
+            i = t.fast_info
+            midcap[name] = {"price": round(i.last_price, 2), "chg": get_change_pct(i)}
+        except:
+            midcap[name] = {"price": 0, "chg": 0}
+    smallcap = {}
+    for name, symbol in RECOMMENDED_SMALLCAP.items():
+        try:
+            t = yf.Ticker(symbol)
+            i = t.fast_info
+            smallcap[name] = {"price": round(i.last_price, 2), "chg": get_change_pct(i)}
+        except:
+            smallcap[name] = {"price": 0, "chg": 0}
+    return midcap, smallcap
+
 def market_mood(chg, vix):
     if chg >= 1.0 and vix < 16:  return "🟢 STRONGLY BULLISH"
     elif chg >= 0.3:              return "🟢 BULLISH"
@@ -93,7 +130,34 @@ def vix_label(vix):
 def fmt(chg):
     return f"{'▲' if chg >= 0 else '▼'} {'+' if chg >= 0 else ''}{chg}%"
 
-def build_morning_message(indices, gainers, losers, watchlist):
+def recommended_section(midcap, smallcap):
+    lines = [
+        f"",
+        f"━━━━━━━━━━━━━━━━━",
+        f"💎 *Debt-Free Midcap Picks*",
+        f"",
+    ]
+    for name, data in midcap.items():
+        arrow = "🟢" if data["chg"] >= 0 else "🔴"
+        lines.append(f"  {arrow} {name:<16} ₹{data['price']}  {fmt(data['chg'])}")
+
+    lines += [
+        f"",
+        f"🌟 *Debt-Free Smallcap Picks*",
+        f"",
+    ]
+    for name, data in smallcap.items():
+        arrow = "🟢" if data["chg"] >= 0 else "🔴"
+        lines.append(f"  {arrow} {name:<16} ₹{data['price']}  {fmt(data['chg'])}")
+
+    lines += [
+        f"",
+        f"_These are debt-free stocks with strong_",
+        f"_future potential. Do your own research!_ 📚",
+    ]
+    return lines
+
+def build_morning_message(indices, gainers, losers, watchlist, midcap, smallcap):
     ist = pytz.timezone("Asia/Kolkata")
     now = datetime.now(ist)
     n50 = indices.get("Nifty 50", {})
@@ -102,6 +166,7 @@ def build_morning_message(indices, gainers, losers, watchlist):
     mid = indices.get("Midcap 50", {})
     vix = indices.get("India VIX", {})
     mood = market_mood(n50.get("chg", 0), vix.get("price", 15))
+
     lines = [
         f"📊 *Nifty Morning Report* 🌅",
         f"🗓 {now.strftime('%a, %d %b %Y')}  🕐 {now.strftime('%I:%M %p IST')}",
@@ -125,6 +190,7 @@ def build_morning_message(indices, gainers, losers, watchlist):
     lines += [f"", f"📉 *Top Losers*"]
     for name, chg in losers:
         lines.append(f"  🔻 {name:<16} {chg}%")
+
     lines += [
         f"",
         f"━━━━━━━━━━━━━━━━━",
@@ -133,7 +199,10 @@ def build_morning_message(indices, gainers, losers, watchlist):
     ]
     for name, data in watchlist.items():
         emoji = "🚨" if data["chg"] >= ALERT_THRESHOLD else "📌"
-        lines.append(f"  {emoji} {name:<16} {fmt(data['chg'])}  ₹{data['price']}")
+        lines.append(f"  {emoji} {name:<16} ₹{data['price']}  {fmt(data['chg'])}")
+
+    lines += recommended_section(midcap, smallcap)
+
     lines += [
         f"",
         f"━━━━━━━━━━━━━━━━━",
@@ -142,7 +211,7 @@ def build_morning_message(indices, gainers, losers, watchlist):
     ]
     return "\n".join(lines)
 
-def build_closing_message(indices, gainers, losers, watchlist):
+def build_closing_message(indices, gainers, losers, watchlist, midcap, smallcap):
     ist = pytz.timezone("Asia/Kolkata")
     now = datetime.now(ist)
     n50 = indices.get("Nifty 50", {})
@@ -152,10 +221,11 @@ def build_closing_message(indices, gainers, losers, watchlist):
     vix = indices.get("India VIX", {})
     mood = market_mood(n50.get("chg", 0), vix.get("price", 15))
     chg = n50.get("chg", 0)
-    if chg >= 0.5:      verdict = "✅ Good day! Market closed strong!"
-    elif chg >= 0:      verdict = "😐 Flat day. Market barely moved."
-    elif chg >= -0.5:   verdict = "😕 Slightly weak day."
-    else:               verdict = "❌ Bad day. Market closed in red."
+    if chg >= 0.5:    verdict = "✅ Good day! Market closed strong!"
+    elif chg >= 0:    verdict = "😐 Flat day. Market barely moved."
+    elif chg >= -0.5: verdict = "😕 Slightly weak day."
+    else:             verdict = "❌ Bad day. Market closed in red."
+
     lines = [
         f"📊 *Nifty Closing Report* 🌇",
         f"🗓 {now.strftime('%a, %d %b %Y')}  🕐 {now.strftime('%I:%M %p IST')}",
@@ -180,6 +250,7 @@ def build_closing_message(indices, gainers, losers, watchlist):
     lines += [f"", f"💔 *Today Worst Performers*"]
     for name, chg in losers:
         lines.append(f"  🔻 {name:<16} {chg}%")
+
     lines += [
         f"",
         f"━━━━━━━━━━━━━━━━━",
@@ -188,7 +259,10 @@ def build_closing_message(indices, gainers, losers, watchlist):
     ]
     for name, data in watchlist.items():
         emoji = "🚨" if data["chg"] >= ALERT_THRESHOLD else "📌"
-        lines.append(f"  {emoji} {name:<16} {fmt(data['chg'])}  ₹{data['price']}")
+        lines.append(f"  {emoji} {name:<16} ₹{data['price']}  {fmt(data['chg'])}")
+
+    lines += recommended_section(midcap, smallcap)
+
     lines += [
         f"",
         f"━━━━━━━━━━━━━━━━━",
@@ -204,7 +278,7 @@ def build_urgent_alert(watchlist):
         f"🚨🚨 *URGENT STOCK ALERT* 🚨🚨",
         f"🕐 {now.strftime('%I:%M %p IST')}",
         f"",
-        f"Stock in your watchlist moved *+{ALERT_THRESHOLD}%+* today!",
+        f"Stock moved *+{ALERT_THRESHOLD}%+* today!",
         f"",
         f"━━━━━━━━━━━━━━━━━",
     ]
@@ -237,18 +311,18 @@ def main():
     gainers, losers = fetch_movers()
     print("👀 Fetching watchlist...")
     watchlist = fetch_watchlist()
+    print("💎 Fetching recommended stocks...")
+    midcap, smallcap = fetch_recommended()
 
-    # Send urgent alert if watchlist stock up 3%+
     urgent = {k: v for k, v in watchlist.items() if v["chg"] >= ALERT_THRESHOLD}
     if urgent:
         print(f"🚨 Urgent alert for: {list(urgent.keys())}")
         send_whatsapp(build_urgent_alert(watchlist))
 
-    # Send morning or closing report
     if mode == "closing":
-        message = build_closing_message(indices, gainers, losers, watchlist)
+        message = build_closing_message(indices, gainers, losers, watchlist, midcap, smallcap)
     else:
-        message = build_morning_message(indices, gainers, losers, watchlist)
+        message = build_morning_message(indices, gainers, losers, watchlist, midcap, smallcap)
 
     print("\n--- PREVIEW ---")
     print(message)
