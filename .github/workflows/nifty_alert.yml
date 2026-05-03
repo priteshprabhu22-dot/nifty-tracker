@@ -1,0 +1,28 @@
+name: Nifty Daily WhatsApp Alert
+
+on:
+  schedule:
+    - cron: "45 3 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  send-nifty-alert:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Nifty Tracker
+        env:
+          TWILIO_SID:   ${{ secrets.TWILIO_SID }}
+          TWILIO_TOKEN: ${{ secrets.TWILIO_TOKEN }}
+          TO_WHATSAPP:  ${{ secrets.TO_WHATSAPP }}
+        run: python nifty_tracker.py
