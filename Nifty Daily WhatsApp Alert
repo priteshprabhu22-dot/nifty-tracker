@@ -2,8 +2,17 @@ name: Nifty Daily WhatsApp Alert
 
 on:
   schedule:
+    # 9:15 AM IST = 3:45 AM UTC
     - cron: "45 3 * * 1-5"
+    # 3:45 PM IST = 10:15 AM UTC
+    - cron: "15 10 * * 1-5"
+
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'morning or closing'
+        required: false
+        default: 'morning'
 
 jobs:
   send-nifty-alert:
@@ -20,9 +29,26 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run Nifty Tracker
+      - name: Run Morning Report (9:15 AM IST)
+        if: github.event.schedule == '45 3 * * 1-5'
         env:
           TWILIO_SID:   ${{ secrets.TWILIO_SID }}
           TWILIO_TOKEN: ${{ secrets.TWILIO_TOKEN }}
           TO_WHATSAPP:  ${{ secrets.TO_WHATSAPP }}
-        run: python nifty_tracker.py
+        run: python nifty_tracker.py morning
+
+      - name: Run Closing Report (3:45 PM IST)
+        if: github.event.schedule == '15 10 * * 1-5'
+        env:
+          TWILIO_SID:   ${{ secrets.TWILIO_SID }}
+          TWILIO_TOKEN: ${{ secrets.TWILIO_TOKEN }}
+          TO_WHATSAPP:  ${{ secrets.TO_WHATSAPP }}
+        run: python nifty_tracker.py closing
+
+      - name: Run Manual Trigger
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          TWILIO_SID:   ${{ secrets.TWILIO_SID }}
+          TWILIO_TOKEN: ${{ secrets.TWILIO_TOKEN }}
+          TO_WHATSAPP:  ${{ secrets.TO_WHATSAPP }}
+        run: python nifty_tracker.py ${{ github.event.inputs.mode || 'morning' }}
